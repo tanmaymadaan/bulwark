@@ -152,8 +152,38 @@ describe("CircuitBreaker", () => {
       const metrics1 = breaker.getMetrics();
       const metrics2 = breaker.getMetrics();
 
-      expect(metrics1).toEqual(metrics2);
       expect(metrics1).not.toBe(metrics2);
+      expect(metrics1).toEqual(metrics2);
+    });
+
+    it("should include nextAttempt when circuit is OPEN with lastFailureTime", () => {
+      const breaker = new CircuitBreaker({ resetTimeout: 30000 });
+      const failureTime = new Date();
+
+      // Manually set state to OPEN with lastFailureTime
+      (breaker as any).state = CircuitState.OPEN;
+      (breaker as any).lastFailureTime = failureTime;
+
+      const metrics = breaker.getMetrics();
+
+      expect(metrics.state).toBe(CircuitState.OPEN);
+      expect(metrics.nextAttempt).toBeInstanceOf(Date);
+      expect(metrics.nextAttempt!.getTime()).toBe(failureTime.getTime() + 30000);
+    });
+
+    it("should calculate failure rate correctly", () => {
+      const breaker = new CircuitBreaker();
+
+      // Manually set some counts to test failure rate calculation
+      (breaker as any).successCount = 7;
+      (breaker as any).failureCount = 3;
+
+      const metrics = breaker.getMetrics();
+
+      expect(metrics.totalCalls).toBe(10);
+      expect(metrics.successfulCalls).toBe(7);
+      expect(metrics.failedCalls).toBe(3);
+      expect(metrics.failureRate).toBe(0.3);
     });
   });
 
@@ -161,9 +191,8 @@ describe("CircuitBreaker", () => {
     it("should reset circuit breaker to initial state", () => {
       const breaker = new CircuitBreaker();
 
-      // Reset should work even in initial state
+      // Reset and check state
       breaker.reset();
-
       expect(breaker.getState()).toBe(CircuitState.CLOSED);
 
       const metrics = breaker.getMetrics();
@@ -171,7 +200,54 @@ describe("CircuitBreaker", () => {
       expect(metrics.successfulCalls).toBe(0);
       expect(metrics.failedCalls).toBe(0);
       expect(metrics.failureRate).toBe(0);
-      expect(metrics.nextAttempt).toBeUndefined();
+    });
+
+    it("should update lastStateChange when reset", () => {
+      const breaker = new CircuitBreaker();
+      const beforeReset = new Date();
+
+      breaker.reset();
+
+      const metrics = breaker.getMetrics();
+      expect(metrics.lastStateChange.getTime()).toBeGreaterThanOrEqual(beforeReset.getTime());
+    });
+  });
+
+  describe("getNextAttemptTime()", () => {
+    it("should return undefined when circuit is CLOSED", () => {
+      const breaker = new CircuitBreaker();
+
+      // Access private method using bracket notation for testing
+      const getNextAttemptTime = (breaker as any).getNextAttemptTime.bind(breaker);
+
+      expect(breaker.getState()).toBe(CircuitState.CLOSED);
+      expect(getNextAttemptTime()).toBeUndefined();
+    });
+
+    it("should return undefined when circuit is OPEN but no lastFailureTime", () => {
+      const breaker = new CircuitBreaker();
+
+      // Manually set state to OPEN without lastFailureTime
+      (breaker as any).state = CircuitState.OPEN;
+      (breaker as any).lastFailureTime = undefined;
+
+      const getNextAttemptTime = (breaker as any).getNextAttemptTime.bind(breaker);
+      expect(getNextAttemptTime()).toBeUndefined();
+    });
+
+    it("should return next attempt time when circuit is OPEN with lastFailureTime", () => {
+      const breaker = new CircuitBreaker({ resetTimeout: 30000 });
+      const failureTime = new Date();
+
+      // Manually set state to OPEN with lastFailureTime
+      (breaker as any).state = CircuitState.OPEN;
+      (breaker as any).lastFailureTime = failureTime;
+
+      const getNextAttemptTime = (breaker as any).getNextAttemptTime.bind(breaker);
+      const nextAttempt = getNextAttemptTime();
+
+      expect(nextAttempt).toBeInstanceOf(Date);
+      expect(nextAttempt.getTime()).toBe(failureTime.getTime() + 30000);
     });
   });
 
