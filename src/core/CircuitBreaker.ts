@@ -31,7 +31,7 @@ export class CircuitBreaker {
 
   /**
    * Creates a new circuit breaker instance
-   * @param config - Configuration options (partial, will be merged with defaults)
+   * @param {Partial<CircuitBreakerConfig>} config - Configuration options (partial, will be merged with defaults)
    */
   constructor(config?: Partial<CircuitBreakerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -47,13 +47,16 @@ export class CircuitBreaker {
 
   /**
    * Executes an operation with circuit breaker protection
-   * @param _operation - Async operation to execute
-   * @returns Promise resolving to operation result
+   * @param {Operation<R>} _operation - Async operation to execute
+   * @returns {Promise<R>} Promise resolving to operation result
    * @throws {Error} When operation fails or times out
    */
-  public async execute<R>(_operation: Operation<R>): Promise<R> {
+  public execute<R>(
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    _operation: Operation<R>
+  ): Promise<R> {
     // Implementation will be added in v0.0.2
-    throw new Error("Not implemented - will be added in v0.0.2");
+    return Promise.reject(new Error("Not implemented - will be added in v0.0.2"));
   }
 
   /**
@@ -87,6 +90,7 @@ export class CircuitBreaker {
 
   /**
    * Resets the circuit breaker to initial state
+   * @returns {void}
    */
   public reset(): void {
     this.state = CircuitState.CLOSED;
@@ -98,7 +102,7 @@ export class CircuitBreaker {
 
   /**
    * Gets the configuration used by this circuit breaker
-   * @returns Current configuration
+   * @returns {Readonly<CircuitBreakerConfig>} Current configuration
    */
   public getConfig(): Readonly<CircuitBreakerConfig> {
     return { ...this.config };
@@ -106,6 +110,7 @@ export class CircuitBreaker {
 
   /**
    * Validates the circuit breaker configuration
+   * @returns {void}
    * @throws {Error} If configuration is invalid
    */
   private validateConfig(): void {
@@ -135,7 +140,7 @@ export class CircuitBreaker {
 
   /**
    * Gets the next attempt time for OPEN state
-   * @returns Next attempt time or undefined if not in OPEN state
+   * @returns {Date | undefined} Next attempt time or undefined if not in OPEN state
    */
   private getNextAttemptTime(): Date | undefined {
     if (this.state !== CircuitState.OPEN || !this.lastFailureTime) {

@@ -51,8 +51,8 @@ export interface CircuitBreakerMetrics {
 export class CircuitBreakerError extends Error {
   /**
    * Creates a new CircuitBreakerError
-   * @param message - Error message
-   * @param state - Current circuit state when error occurred
+   * @param {string} message - Error message
+   * @param {CircuitState} state - Current circuit state when error occurred
    */
   constructor(
     message: string,
@@ -62,7 +62,7 @@ export class CircuitBreakerError extends Error {
     this.name = "CircuitBreakerError";
 
     // Maintains proper stack trace for where our error was thrown (only available on V8)
-    if (Error.captureStackTrace) {
+    if (typeof Error.captureStackTrace === "function") {
       Error.captureStackTrace(this, CircuitBreakerError);
     }
   }
