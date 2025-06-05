@@ -239,9 +239,9 @@ describe("CircuitBreaker", () => {
       await breaker.execute(() => Promise.reject(new Error("fail")));
 
       // Act & Assert
-      await expect(
-        breaker.execute(() => Promise.resolve("test"))
-      ).rejects.toThrow(CircuitBreakerError);
+      await expect(breaker.execute(() => Promise.resolve("test"))).rejects.toThrow(
+        CircuitBreakerError
+      );
     });
   });
 });
@@ -337,17 +337,130 @@ main                    # Production-ready code
 5. **Performance Check**: Run benchmarks
 6. **Create PR**: Use PR template
 7. **Code Review**: Address feedback
-8. **Merge**: Squash and merge to develop
+8. **Merge**: Follow merge strategy guidelines below
+
+### Merge Strategy
+
+**Default Strategy: Squash and Merge**
+
+We use **squash and merge** as our primary merge strategy for the following reasons:
+
+- **Clean History**: Maintains a linear, readable commit history on main branches
+- **Atomic Changes**: Each merge represents one complete feature/fix
+- **Semantic Versioning**: Aligns with our strict semver approach
+- **Quality Gates**: Ensures each commit on main has passed all quality checks
+- **Easier Debugging**: Simplifies bisecting and identifying when issues were introduced
+- **Professional Appearance**: Clean history for enterprise adoption
+
+#### When to Use Squash and Merge
+
+**✅ Use for (95% of cases):**
+
+- Feature development (`feature/*`)
+- Bug fixes (`fix/*`)
+- Documentation updates (`docs/*`)
+- Refactoring (`refactor/*`)
+- Performance improvements (`perf/*`)
+- Test additions (`test/*`)
+
+**Example squash commit message:**
+
+```
+feat(core): implement adaptive timeout detection
+
+- Add machine learning-based timeout adjustment algorithm
+- Include comprehensive test suite with edge cases
+- Add performance benchmarks showing <0.5ms overhead
+- Update documentation with configuration examples
+
+Closes #42
+```
+
+#### When to Use Regular Merge
+
+**⚠️ Use sparingly for:**
+
+- **Release merges**: `release/0.x.0` → `main`
+- **Hotfix merges**: Critical security fixes where commit history matters
+- **Large refactors**: When preserving individual commit context is valuable
+- **Collaborative features**: Multiple developers where individual contributions should be preserved
+
+**Example regular merge scenarios:**
+
+```bash
+# Release merge - preserve release preparation history
+git merge --no-ff release/0.2.0
+
+# Hotfix merge - preserve security fix audit trail
+git merge --no-ff hotfix/security-vulnerability-cve-2024-001
+```
+
+#### When to Use Rebase and Merge
+
+**❌ Generally avoid** - Can create confusion and doesn't align with our quality-first approach
+
+### Merge Guidelines
+
+#### For Feature Branches
+
+1. **Squash Commits**: Combine all work commits into one logical unit
+2. **Write Descriptive Message**: Follow conventional commit format
+3. **Include Context**: Reference issues, breaking changes, performance impact
+4. **Verify Tests**: Ensure 100% test passage before merge
+
+#### For Release Branches
+
+1. **Regular Merge**: Preserve release preparation commits
+2. **Tag Immediately**: Create version tag after merge
+3. **Update Changelog**: Ensure CHANGELOG.md is current
+4. **Announce**: Notify community of release
+
+#### Commit Message for Squashed Merges
+
+```
+<type>(scope): <description>
+
+<detailed description of changes>
+
+- Key change 1
+- Key change 2
+- Key change 3
+
+Performance impact: <impact description>
+Breaking changes: <none|description>
+Migration guide: <link if applicable>
+
+Closes #<issue-number>
+```
+
+### Branch Protection Rules
+
+**Main Branch:**
+
+- Require pull request reviews (minimum 1)
+- Require status checks to pass
+- Require branches to be up to date
+- Require conversation resolution
+- Restrict pushes to admins only
+
+**Develop Branch:**
+
+- Require pull request reviews (minimum 1)
+- Require status checks to pass
+- Allow force pushes for maintainers
 
 ### Release Process
 
-1. **Code Freeze**: Stop new features
-2. **Testing**: Comprehensive test suite
-3. **Documentation**: Update CHANGELOG.md
-4. **Version Bump**: Update package.json
-5. **Tag Release**: `git tag -a v0.x.0`
-6. **Publish**: NPM and GitHub release
-7. **Announce**: Community updates
+1. **Code Freeze**: Stop new features, create `release/0.x.0` branch
+2. **Testing**: Comprehensive test suite, manual testing
+3. **Documentation**: Update CHANGELOG.md, API docs, examples
+4. **Version Bump**: Update package.json, package-lock.json
+5. **Release PR**: Create PR from `release/0.x.0` to `main`
+6. **Regular Merge**: Use `git merge --no-ff` to preserve release history
+7. **Tag Release**: `git tag -a v0.x.0 -m "Release v0.x.0"`
+8. **Publish**: NPM publish, GitHub release
+9. **Backmerge**: Merge `main` back to `develop`
+10. **Announce**: Community updates, social media
 
 ---
 
@@ -431,11 +544,7 @@ describe("Performance Benchmarks", () => {
     }
   },
   "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write",
-      "jest --findRelatedTests --passWithNoTests"
-    ]
+    "*.{ts,tsx}": ["eslint --fix", "prettier --write", "jest --findRelatedTests --passWithNoTests"]
   }
 }
 ```
