@@ -115,11 +115,12 @@ export class ErrorClassifier {
    * @returns {ErrorType} The classified error type
    */
   static determineErrorType(error: unknown): ErrorType {
-    if (!error) return ErrorType.EXTERNAL_SERVICE;
+    if (error === null || error === undefined) return ErrorType.EXTERNAL_SERVICE;
 
     // Check HTTP status codes
     if (typeof error === "object" && error !== null && "status" in error) {
-      const status = (error as any)["status"];
+      const errorObj = error as { status: unknown };
+      const status = errorObj.status;
       if (typeof status === "number") {
         const statusType = this.classifyByStatusCode(status);
         if (statusType !== ErrorType.UNKNOWN) return statusType;
@@ -128,24 +129,26 @@ export class ErrorClassifier {
 
     // Check error name
     if (typeof error === "object" && error !== null && "name" in error) {
-      const name = (error as any)["name"];
+      const errorObj = error as { name: unknown };
+      const name = errorObj.name;
       if (typeof name === "string" && name in this.ERROR_NAME_MAPPINGS) {
         const mappedType = this.ERROR_NAME_MAPPINGS[name];
-        if (mappedType) return mappedType;
+        if (mappedType !== undefined && mappedType !== null) return mappedType;
       }
     }
 
     // Check error code
     if (typeof error === "object" && error !== null && "code" in error) {
-      const code = (error as any)["code"];
+      const errorObj = error as { code: unknown };
+      const code = errorObj.code;
       if (typeof code === "string" && code in this.ERROR_CODE_MAPPINGS) {
         const mappedType = this.ERROR_CODE_MAPPINGS[code];
-        if (mappedType) return mappedType;
+        if (mappedType !== undefined && mappedType !== null) return mappedType;
       }
     }
 
     // Check message patterns
-    const message = ErrorUtils.getMessage(error);
+    const message = this.getMessage(error);
     for (const [pattern, type] of this.MESSAGE_PATTERNS) {
       if (pattern.test(message)) {
         return type;
@@ -155,8 +158,14 @@ export class ErrorClassifier {
     return ErrorType.EXTERNAL_SERVICE;
   }
 
+  /**
+   * Classifies an error by HTTP status code
+   * @param {number} status - The HTTP status code
+   * @returns {ErrorType} The corresponding error type
+   */
   private static classifyByStatusCode(status: number): ErrorType {
-    return this.HTTP_STATUS_MAPPINGS[status] || ErrorType.EXTERNAL_SERVICE;
+    const mappedType = this.HTTP_STATUS_MAPPINGS[status];
+    return mappedType !== undefined ? mappedType : ErrorType.EXTERNAL_SERVICE;
   }
 
   /**
@@ -270,7 +279,8 @@ export class ErrorClassifier {
     }
 
     // Check for specific rate limit indicators in message
-    const message = ErrorUtils.getMessage(error).toLowerCase();
+    const message = this.getMessage(error);
+    const messageLower = message.toLowerCase();
     const highVolumeIndicators = [
       "rate limit exceeded",
       "too many requests",
@@ -285,7 +295,7 @@ export class ErrorClassifier {
       "api limit",
     ];
 
-    return highVolumeIndicators.some((indicator) => message.includes(indicator));
+    return highVolumeIndicators.some((indicator) => messageLower.includes(indicator));
   }
 
   /**
@@ -294,7 +304,8 @@ export class ErrorClassifier {
    * @returns {boolean} True if the error is permanent
    */
   private static isPermanentError(error: unknown): boolean {
-    const message = ErrorUtils.getMessage(error).toLowerCase();
+    const message = this.getMessage(error);
+    const messageLower = message.toLowerCase();
 
     const permanentKeywords = [
       "not found",
@@ -305,7 +316,7 @@ export class ErrorClassifier {
       "constraint violation",
     ];
 
-    return permanentKeywords.some((keyword) => message.includes(keyword));
+    return permanentKeywords.some((keyword) => messageLower.includes(keyword));
   }
 
   /**
@@ -333,18 +344,21 @@ export class ErrorClassifier {
       return this.classify(error);
     };
   }
-}
 
-/**
- * Utility functions for error handling
- */
-export class ErrorUtils {
   /**
-   * Extracts a readable message from an error
-   * @param {unknown} error - The error object
-   * @returns {string} A string representation of the error
+   * Gets the error message from an error object
+   * @param {unknown} error - The error object to get message from
+   * @returns {string} The error message
    */
-  static getMessage(error: unknown): string {
+  private static getMessage(error: unknown): string {
+    if (error === null || error === undefined) {
+      return "Unknown error";
+    }
+
+    if (error instanceof Error) {
+      return error.message;
+    }
+
     if (typeof error === "string") {
       return error;
     }
@@ -353,30 +367,68 @@ export class ErrorUtils {
       return String(error);
     }
 
+    if (typeof error === "object") {
+      const errorObj = error as Record<string, unknown>;
+      if (typeof errorObj.message === "string") {
+        return errorObj.message;
+      }
+      if (typeof errorObj.toString === "function") {
+        try {
+          const result = (errorObj.toString as (this: void) => unknown)();
+          return typeof result === "string" ? result : "Unknown error";
+        } catch {
+          return "Unknown error";
+        }
+      }
+      // Handle objects without toString method
+      return "Unknown error";
+    }
+
+    return "Unknown error";
+  }
+}
+
+/**
+ * Utility functions for error handling
+ */
+export class ErrorUtils {
+  /**
+   * Gets the error message from an error object
+   * @param {unknown} error - The error object to get message from
+   * @returns {string} The error message
+   */
+  static getMessage(error: unknown): string {
     if (error === null || error === undefined) {
       return "Unknown error";
     }
 
-    if (typeof error === "object") {
-      // Check for message property
-      if ("message" in error && typeof (error as any)["message"] === "string") {
-        return (error as any)["message"];
-      }
+    if (error instanceof Error) {
+      return error.message;
+    }
 
-      // Check for toString method
-      if (typeof (error as any).toString === "function") {
+    if (typeof error === "string") {
+      return error;
+    }
+
+    if (typeof error === "number" || typeof error === "boolean") {
+      return String(error);
+    }
+
+    if (typeof error === "object") {
+      const errorObj = error as Record<string, unknown>;
+      if (typeof errorObj.message === "string") {
+        return errorObj.message;
+      }
+      if (typeof errorObj.toString === "function") {
         try {
-          const result = (error as any).toString();
-          if (typeof result === "string") {
-            return result;
-          }
+          const result = (errorObj.toString as (this: void) => unknown)();
+          return typeof result === "string" ? result : "Unknown error";
         } catch {
-          // Fall through to default
+          return "Unknown error";
         }
       }
-
-      // For objects without message or toString, return [object Object]
-      return "[object Object]";
+      // Handle objects without toString method
+      return "Unknown error";
     }
 
     return "Unknown error";
@@ -415,22 +467,25 @@ export class ErrorUtils {
       return new Error(error);
     }
 
+    if (typeof error === "number" || typeof error === "boolean") {
+      return new Error(String(error));
+    }
+
     if (typeof error === "object") {
       const errorObj = error as Record<string, unknown>;
-      const message =
-        typeof errorObj["message"] === "string" ? errorObj["message"] : "Unknown error";
+      const message = typeof errorObj.message === "string" ? errorObj.message : "Unknown error";
       const normalizedError = new Error(message);
 
       // Copy enumerable properties
       for (const key in errorObj) {
         if (key !== "message" && key !== "name" && key !== "stack") {
-          (normalizedError as unknown as Record<string, unknown>)[key] = errorObj[key];
+          (normalizedError as Record<string, unknown>)[key] = errorObj[key];
         }
       }
 
       return normalizedError;
     }
 
-    return new Error(String(error));
+    return new Error("Unknown error");
   }
 }

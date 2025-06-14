@@ -96,20 +96,22 @@ export class Timer {
 
   /**
    * Resets the timer to its initial state
+   * @returns {void}
    */
   reset(): void {
     this.stop();
-    this.startTime = undefined as any;
-    this.promise = undefined as any;
+    delete (this as unknown as { startTime?: number }).startTime;
+    delete (this as unknown as { promise?: Promise<void> }).promise;
   }
 
   /**
    * Cleans up timer resources
+   * @returns {void}
    */
   private cleanup(): void {
-    if (this.timeoutId) {
+    if (this.timeoutId !== undefined) {
       clearTimeout(this.timeoutId);
-      this.timeoutId = undefined as any;
+      delete (this as unknown as { timeoutId?: NodeJS.Timeout }).timeoutId;
     }
   }
 
