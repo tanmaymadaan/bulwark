@@ -77,7 +77,7 @@ describe("Main Index Exports", () => {
 
   describe("Version Export", () => {
     it("should export VERSION constant", () => {
-      expect(BulwarkExports.VERSION).toBe("0.0.1");
+      expect(BulwarkExports.VERSION).toBe("0.0.2");
       expect(typeof BulwarkExports.VERSION).toBe("string");
     });
   });
@@ -88,6 +88,7 @@ describe("Main Index Exports", () => {
         "CircuitBreaker",
         "CircuitState",
         "CircuitBreakerError",
+        "TimeoutError",
         "DEFAULT_CONFIG",
         "VERSION",
       ];
@@ -98,17 +99,21 @@ describe("Main Index Exports", () => {
     });
 
     it("should not export unexpected members", () => {
-      const actualExports = Object.keys(BulwarkExports);
       const expectedExports = [
         "CircuitBreaker",
         "CircuitState",
-        "CircuitBreakerConfig",
-        "CircuitBreakerMetrics",
         "CircuitBreakerError",
-        "Operation",
+        "TimeoutError",
         "DEFAULT_CONFIG",
         "VERSION",
+        // Utility exports for advanced users
+        "SlidingWindow",
+        "MetricsCollector",
+        "FailureDetector",
+        "StateManager",
       ];
+
+      const actualExports = Object.keys(BulwarkExports);
 
       // All actual exports should be expected
       actualExports.forEach((exportName) => {

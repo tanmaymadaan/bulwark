@@ -239,9 +239,9 @@ describe("CircuitBreaker", () => {
       await breaker.execute(() => Promise.reject(new Error("fail")));
 
       // Act & Assert
-      await expect(
-        breaker.execute(() => Promise.resolve("test"))
-      ).rejects.toThrow(CircuitBreakerError);
+      await expect(breaker.execute(() => Promise.resolve("test"))).rejects.toThrow(
+        CircuitBreakerError
+      );
     });
   });
 });
@@ -431,11 +431,7 @@ describe("Performance Benchmarks", () => {
     }
   },
   "lint-staged": {
-    "*.{ts,tsx}": [
-      "eslint --fix",
-      "prettier --write",
-      "jest --findRelatedTests --passWithNoTests"
-    ]
+    "*.{ts,tsx}": ["eslint --fix", "prettier --write", "jest --findRelatedTests --passWithNoTests"]
   }
 }
 ```

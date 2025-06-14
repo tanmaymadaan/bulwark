@@ -8,14 +8,22 @@
 export { CircuitBreaker } from "./core/CircuitBreaker";
 
 // Type exports
-export {
-  CircuitState,
+export { CircuitState, CircuitBreakerError, TimeoutError, DEFAULT_CONFIG } from "./types/index";
+
+// Type interfaces (for TypeScript users)
+export type {
   CircuitBreakerConfig,
   CircuitBreakerMetrics,
-  CircuitBreakerError,
   Operation,
-  DEFAULT_CONFIG,
+  CallRecord,
+  FailureRecord,
 } from "./types/index";
 
 // Version export
-export const VERSION = "0.0.1";
+export const VERSION = "0.0.2";
+
+// Utility exports (for advanced users)
+export { SlidingWindow } from "./metrics/SlidingWindow";
+export { MetricsCollector } from "./metrics/MetricsCollector";
+export { FailureDetector } from "./core/FailureDetector";
+export { StateManager } from "./core/StateManager";
