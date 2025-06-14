@@ -369,8 +369,8 @@ export class ErrorClassifier {
 
     if (typeof error === "object") {
       const errorObj = error as Record<string, unknown>;
-      if (typeof errorObj.message === "string") {
-        return errorObj.message;
+      if (typeof errorObj["message"] === "string") {
+        return errorObj["message"];
       }
       if (typeof errorObj.toString === "function") {
         try {
@@ -416,8 +416,8 @@ export class ErrorUtils {
 
     if (typeof error === "object") {
       const errorObj = error as Record<string, unknown>;
-      if (typeof errorObj.message === "string") {
-        return errorObj.message;
+      if (typeof errorObj["message"] === "string") {
+        return errorObj["message"];
       }
       if (typeof errorObj.toString === "function") {
         try {
@@ -473,13 +473,14 @@ export class ErrorUtils {
 
     if (typeof error === "object") {
       const errorObj = error as Record<string, unknown>;
-      const message = typeof errorObj.message === "string" ? errorObj.message : "Unknown error";
+      const message =
+        typeof errorObj["message"] === "string" ? errorObj["message"] : "Unknown error";
       const normalizedError = new Error(message);
 
       // Copy enumerable properties
       for (const key in errorObj) {
         if (key !== "message" && key !== "name" && key !== "stack") {
-          (normalizedError as Record<string, unknown>)[key] = errorObj[key];
+          (normalizedError as unknown as Record<string, unknown>)[key] = errorObj[key];
         }
       }
 
