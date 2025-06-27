@@ -264,21 +264,24 @@ export class ErrorClassifier {
    * @returns {boolean} True if it's a high volume rate limit
    */
   private static isHighVolumeRateLimit(error: unknown): boolean {
-    if (error === null || error === undefined || typeof error !== "object") {
+    if (error === null || error === undefined) {
       return false;
     }
 
-    const errorObj = error as Record<string, unknown>;
+    // Handle object errors
+    if (typeof error === "object") {
+      const errorObj = error as Record<string, unknown>;
 
-    // Check for retry-after header
-    const retryAfter = (errorObj["retryAfter"] as string) || (errorObj["retry-after"] as string);
-    if (retryAfter) {
-      const retrySeconds = parseInt(retryAfter, 10);
-      // Consider it high volume if retry-after is more than 60 seconds
-      return !isNaN(retrySeconds) && retrySeconds > 60;
+      // Check for retry-after header
+      const retryAfter = (errorObj["retryAfter"] as string) || (errorObj["retry-after"] as string);
+      if (retryAfter) {
+        const retrySeconds = parseInt(retryAfter, 10);
+        // Consider it high volume if retry-after is more than 60 seconds
+        return !isNaN(retrySeconds) && retrySeconds > 60;
+      }
     }
 
-    // Check for specific rate limit indicators in message
+    // Check for specific rate limit indicators in message (works for both strings and objects)
     const message = this.getMessage(error);
     const messageLower = message.toLowerCase();
     const highVolumeIndicators = [

@@ -1065,4 +1065,57 @@ describe("CircuitBreaker", () => {
       expect(config.resetTimeout).toBeDefined(); // Should have default value
     });
   });
+
+  describe("Internal State Management", () => {
+    it("should handle shouldAttemptReset when no lastFailureTime is set", () => {
+      const breaker = new CircuitBreaker({ resetTimeout: 1000 });
+
+      // Force circuit to OPEN state without setting lastFailureTime
+      (breaker as any).stateManager.transitionTo(CircuitState.OPEN);
+      (breaker as any).lastFailureTime = undefined;
+
+      // This should trigger the branch where !this.lastFailureTime is true
+      const shouldReset = (breaker as any).shouldAttemptReset();
+      expect(shouldReset).toBe(true);
+    });
+
+    it("should handle shouldAttemptReset when lastFailureTime is set but timeout not reached", () => {
+      const breaker = new CircuitBreaker({ resetTimeout: 10000 }); // 10 seconds
+
+      // Set lastFailureTime to now
+      (breaker as any).lastFailureTime = new Date();
+
+      const shouldReset = (breaker as any).shouldAttemptReset();
+      expect(shouldReset).toBe(false);
+    });
+
+    it("should handle shouldAttemptReset when lastFailureTime is set and timeout reached", () => {
+      const breaker = new CircuitBreaker({ resetTimeout: 100 }); // 100ms
+
+      // Set lastFailureTime to past
+      (breaker as any).lastFailureTime = new Date(Date.now() - 200);
+
+      const shouldReset = (breaker as any).shouldAttemptReset();
+      expect(shouldReset).toBe(true);
+    });
+
+    it("should return undefined for getNextAttemptTime when not in OPEN state", () => {
+      const breaker = new CircuitBreaker();
+
+      // Circuit is in CLOSED state by default
+      const nextAttempt = (breaker as any).getNextAttemptTime();
+      expect(nextAttempt).toBeUndefined();
+    });
+
+    it("should return undefined for getNextAttemptTime when in OPEN state but no lastFailureTime", () => {
+      const breaker = new CircuitBreaker();
+
+      // Force to OPEN state without lastFailureTime
+      (breaker as any).stateManager.transitionTo(CircuitState.OPEN);
+      (breaker as any).lastFailureTime = undefined;
+
+      const nextAttempt = (breaker as any).getNextAttemptTime();
+      expect(nextAttempt).toBeUndefined();
+    });
+  });
 });
