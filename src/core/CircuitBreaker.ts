@@ -4,7 +4,12 @@ import {
   CircuitBreakerMetrics,
   Operation,
   DEFAULT_CONFIG,
+  CircuitBreakerError,
+  TimeoutError,
 } from "../types/index";
+import { StateManager } from "./StateManager";
+import { FailureDetector } from "./FailureDetector";
+import { MetricsCollector } from "../metrics/MetricsCollector";
 
 /**
  * Circuit breaker for protecting against cascading failures
@@ -23,11 +28,10 @@ import {
  */
 export class CircuitBreaker {
   private readonly config: CircuitBreakerConfig;
-  private state: CircuitState;
-  private failureCount: number;
-  private successCount: number;
+  private readonly stateManager: StateManager;
+  private readonly failureDetector: FailureDetector;
+  private readonly metricsCollector: MetricsCollector;
   private lastFailureTime: Date | undefined;
-  private lastStateChange: Date;
 
   /**
    * Creates a new circuit breaker instance
@@ -35,28 +39,49 @@ export class CircuitBreaker {
    */
   constructor(config?: Partial<CircuitBreakerConfig>) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    this.state = CircuitState.CLOSED;
-    this.failureCount = 0;
-    this.successCount = 0;
-    this.lastFailureTime = undefined;
-    this.lastStateChange = new Date();
 
-    // Validate configuration
+    // Validate configuration before creating components
     this.validateConfig();
+
+    this.stateManager = new StateManager();
+    this.failureDetector = new FailureDetector(this.config);
+    this.metricsCollector = new MetricsCollector(this.config.minimumThroughput * 2);
+    this.lastFailureTime = undefined;
   }
 
   /**
    * Executes an operation with circuit breaker protection
-   * @param {Operation<R>} _operation - Async operation to execute
+   * @param {Operation<R>} operation - Async operation to execute
    * @returns {Promise<R>} Promise resolving to operation result
-   * @throws {Error} When operation fails or times out
+   * @throws {CircuitBreakerError} When circuit is open and not ready for retry
+   * @throws {TimeoutError} When operation exceeds timeout
+   * @throws {Error} When operation fails
    */
-  public execute<R>(
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    _operation: Operation<R>
-  ): Promise<R> {
-    // Implementation will be added in v0.0.2
-    return Promise.reject(new Error("Not implemented - will be added in v0.0.2"));
+  public async execute<R>(operation: Operation<R>): Promise<R> {
+    // Check current state and decide whether to execute
+    const currentState = this.stateManager.getState();
+
+    if (currentState === CircuitState.OPEN) {
+      if (this.shouldAttemptReset()) {
+        this.stateManager.transitionTo(CircuitState.HALF_OPEN);
+      } else {
+        throw new CircuitBreakerError(
+          `Circuit breaker is OPEN. Next attempt allowed at ${this.getNextAttemptTime()?.toISOString()}`,
+          currentState
+        );
+      }
+    }
+
+    // Execute with timeout and failure detection
+    const startTime = Date.now();
+    try {
+      const result = await this.executeWithTimeout(operation);
+      this.onSuccess(Date.now() - startTime);
+      return result;
+    } catch (error) {
+      this.onFailure(error as Error, Date.now() - startTime);
+      throw error;
+    }
   }
 
   /**
@@ -64,7 +89,7 @@ export class CircuitBreaker {
    * @returns Current circuit state
    */
   public getState(): CircuitState {
-    return this.state;
+    return this.stateManager.getState();
   }
 
   /**
@@ -72,20 +97,11 @@ export class CircuitBreaker {
    * @returns Current metrics snapshot
    */
   public getMetrics(): CircuitBreakerMetrics {
-    const totalCalls = this.successCount + this.failureCount;
-    const failureRate = totalCalls > 0 ? this.failureCount / totalCalls : 0;
-    const nextAttempt = this.getNextAttemptTime();
-
-    return {
-      state: this.state,
-      totalCalls,
-      successfulCalls: this.successCount,
-      failedCalls: this.failureCount,
-      failureRate,
-      averageResponseTime: 0, // Will be implemented in v0.0.3 with metrics collection
-      lastStateChange: this.lastStateChange,
-      ...(nextAttempt && { nextAttempt }),
-    };
+    return this.metricsCollector.getMetrics(
+      this.stateManager.getState(),
+      this.stateManager.getLastStateChange(),
+      this.getNextAttemptTime()
+    );
   }
 
   /**
@@ -93,11 +109,10 @@ export class CircuitBreaker {
    * @returns {void}
    */
   public reset(): void {
-    this.state = CircuitState.CLOSED;
-    this.failureCount = 0;
-    this.successCount = 0;
+    this.stateManager.reset();
+    this.failureDetector.reset();
+    this.metricsCollector.reset();
     this.lastFailureTime = undefined;
-    this.lastStateChange = new Date();
   }
 
   /**
@@ -106,6 +121,90 @@ export class CircuitBreaker {
    */
   public getConfig(): Readonly<CircuitBreakerConfig> {
     return { ...this.config };
+  }
+
+  /**
+   * Executes operation with timeout protection
+   * @param {Operation<R>} operation - Operation to execute
+   * @returns {Promise<R>} Promise resolving to operation result
+   * @throws TimeoutError if operation exceeds timeout
+   */
+  private async executeWithTimeout<R>(operation: Operation<R>): Promise<R> {
+    return Promise.race([operation(), this.createTimeoutPromise<R>()]);
+  }
+
+  /**
+   * Creates a promise that rejects after the configured timeout
+   * @returns Promise that rejects with TimeoutError
+   */
+  private createTimeoutPromise<R>(): Promise<R> {
+    return new Promise<R>((_, reject) => {
+      setTimeout(() => {
+        reject(
+          new TimeoutError(
+            `Operation timed out after ${this.config.timeout}ms`,
+            this.config.timeout
+          )
+        );
+      }, this.config.timeout);
+    });
+  }
+
+  /**
+   * Handles successful operation execution
+   * @param {number} responseTime - Response time in milliseconds
+   * @returns {void}
+   */
+  private onSuccess(responseTime: number): void {
+    this.metricsCollector.recordSuccess(responseTime);
+    this.failureDetector.recordSuccess();
+
+    // If we're in HALF_OPEN state and got a success, close the circuit
+    if (this.stateManager.getState() === CircuitState.HALF_OPEN) {
+      this.stateManager.transitionTo(CircuitState.CLOSED);
+    }
+  }
+
+  /**
+   * Handles failed operation execution
+   * @param {Error} error - Error that occurred
+   * @param {number} responseTime - Response time in milliseconds
+   * @returns {void}
+   */
+  private onFailure(error: Error, responseTime: number): void {
+    this.metricsCollector.recordFailure(responseTime, error);
+    this.failureDetector.recordFailure(error);
+    this.lastFailureTime = new Date();
+
+    // Check if we should open the circuit
+    if (this.failureDetector.shouldOpenCircuit()) {
+      this.stateManager.transitionTo(CircuitState.OPEN);
+    }
+  }
+
+  /**
+   * Determines if we should attempt to reset from OPEN to HALF_OPEN
+   * @returns True if reset should be attempted
+   */
+  private shouldAttemptReset(): boolean {
+    if (!this.lastFailureTime) {
+      return true; // No previous failure, allow reset
+    }
+
+    const timeSinceLastFailure = Date.now() - this.lastFailureTime.getTime();
+    return timeSinceLastFailure >= this.config.resetTimeout;
+  }
+
+  /**
+   * Gets the next attempt time for OPEN state
+   * @returns {Date | undefined} Next attempt time or undefined if not in OPEN state
+   */
+  private getNextAttemptTime(): Date | undefined {
+    if (this.stateManager.getState() !== CircuitState.OPEN || !this.lastFailureTime) {
+      return undefined;
+    }
+
+    return new Date(this.lastFailureTime.getTime() + this.config.resetTimeout);
   }
 
   /**
@@ -136,17 +235,5 @@ export class CircuitBreaker {
     if (minimumThroughput <= 0) {
       throw new Error("minimumThroughput must be greater than 0");
     }
-  }
-
-  /**
-   * Gets the next attempt time for OPEN state
-   * @returns {Date | undefined} Next attempt time or undefined if not in OPEN state
-   */
-  private getNextAttemptTime(): Date | undefined {
-    if (this.state !== CircuitState.OPEN || !this.lastFailureTime) {
-      return undefined;
-    }
-
-    return new Date(this.lastFailureTime.getTime() + this.config.resetTimeout);
   }
 }

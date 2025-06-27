@@ -69,6 +69,55 @@ export class CircuitBreakerError extends Error {
 }
 
 /**
+ * Custom error for timeout operations
+ */
+export class TimeoutError extends Error {
+  /**
+   * Creates a new TimeoutError
+   * @param {string} message - Error message
+   * @param {number} timeout - Timeout value that was exceeded
+   */
+  constructor(
+    message: string,
+    public readonly timeout: number
+  ) {
+    super(message);
+    this.name = "TimeoutError";
+
+    // Maintains proper stack trace for where our error was thrown (only available on V8)
+    if (typeof Error.captureStackTrace === "function") {
+      Error.captureStackTrace(this, TimeoutError);
+    }
+  }
+}
+
+/**
+ * Record for tracking call results in sliding window
+ */
+export interface CallRecord {
+  /** Timestamp of the call */
+  timestamp: number;
+  /** Whether the call was successful */
+  isSuccess: boolean;
+  /** Response time in milliseconds */
+  responseTime: number;
+  /** Error if call failed */
+  error?: Error;
+}
+
+/**
+ * Record for tracking failures in sliding window
+ */
+export interface FailureRecord {
+  /** Timestamp of the call */
+  timestamp: number;
+  /** Error that occurred (null for success) */
+  error: Error | null;
+  /** Whether this should be considered a failure */
+  isFailure: boolean;
+}
+
+/**
  * Operation function type for circuit breaker execution
  */
 export type Operation<T> = () => Promise<T>;
