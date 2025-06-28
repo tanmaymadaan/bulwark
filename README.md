@@ -102,14 +102,6 @@ const result = await breaker.execute(async () => {
 });
 ```
 
-##### `getState(): CircuitState`
-
-Returns the current circuit state.
-
-```typescript
-const state = breaker.getState(); // 'CLOSED' | 'OPEN' | 'HALF_OPEN'
-```
-
 ##### `getMetrics(): CircuitBreakerMetrics`
 
 Returns current metrics and statistics.
@@ -117,6 +109,31 @@ Returns current metrics and statistics.
 ```typescript
 const metrics = breaker.getMetrics();
 console.log(`Success rate: ${(1 - metrics.failureRate) * 100}%`);
+console.log(`Current state: ${metrics.state}`);
+```
+
+##### `exportMetricsJSON(): string`
+
+Exports current metrics as JSON string for external monitoring systems.
+
+```typescript
+const jsonMetrics = breaker.exportMetricsJSON();
+console.log("Metrics for monitoring:", jsonMetrics);
+
+// Parse the JSON for programmatic use
+const parsedMetrics = JSON.parse(jsonMetrics);
+console.log(`Timestamp: ${parsedMetrics.timestamp}`);
+```
+
+##### `getWindowStats(): object`
+
+Gets sliding window statistics including window size, current count, and failure rate.
+
+```typescript
+const windowStats = breaker.getWindowStats();
+console.log(`Window size: ${windowStats.windowSize}`);
+console.log(`Current count: ${windowStats.currentCount}`);
+console.log(`Window failure rate: ${windowStats.failureRate}`);
 ```
 
 ##### `reset(): void`
@@ -127,7 +144,18 @@ Resets the circuit breaker to initial state.
 breaker.reset(); // Back to CLOSED state with cleared metrics
 ```
 
+##### `getConfig(): Readonly<CircuitBreakerConfig>`
+
+Returns the current configuration used by the circuit breaker.
+
+```typescript
+const config = breaker.getConfig();
+console.log(`Failure threshold: ${config.failureThreshold}`);
+```
+
 ## 📊 Monitoring & Metrics
+
+### Basic Metrics
 
 ```typescript
 const metrics = breaker.getMetrics();
@@ -142,6 +170,37 @@ console.log({
   lastStateChange: metrics.lastStateChange, // When state last changed
   nextAttempt: metrics.nextAttempt, // Next retry time (if OPEN)
 });
+```
+
+### JSON Export for Monitoring
+
+Perfect for integration with monitoring systems like Prometheus, Grafana, or custom dashboards:
+
+```typescript
+// Export metrics as JSON with timestamp
+const jsonMetrics = breaker.exportMetricsJSON();
+
+// Send to monitoring system
+await fetch("/metrics", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: jsonMetrics,
+});
+```
+
+### Sliding Window Statistics
+
+Get detailed statistics about the sliding window used for failure rate calculation:
+
+```typescript
+const windowStats = breaker.getWindowStats();
+
+console.log(`
+  Window Configuration:
+  - Size: ${windowStats.windowSize} calls
+  - Current Count: ${windowStats.currentCount} calls
+  - Window Failure Rate: ${(windowStats.failureRate * 100).toFixed(1)}%
+`);
 ```
 
 ## 🎨 Examples
@@ -172,6 +231,16 @@ class PaymentService {
       return response.json();
     });
   }
+
+  // Monitor payment service health
+  getHealthMetrics() {
+    const metrics = this.breaker.getMetrics();
+    return {
+      isHealthy: metrics.state === "CLOSED",
+      successRate: ((metrics.successfulCalls / metrics.totalCalls) * 100).toFixed(1) + "%",
+      averageResponseTime: metrics.averageResponseTime.toFixed(0) + "ms",
+    };
+  }
 }
 ```
 
@@ -196,6 +265,16 @@ class DatabaseService {
       }
     });
   }
+
+  // Export metrics for database monitoring
+  async exportDatabaseMetrics() {
+    const jsonMetrics = this.breaker.exportMetricsJSON();
+
+    // Send to monitoring system
+    await this.monitoringService.send("database_circuit_breaker", jsonMetrics);
+
+    return jsonMetrics;
+  }
 }
 ```
 
@@ -211,6 +290,11 @@ try {
 } catch (error) {
   if (error instanceof CircuitBreakerError) {
     console.log(`Circuit breaker is ${error.state}`);
+
+    // Get detailed metrics for debugging
+    const metrics = breaker.getMetrics();
+    console.log(`Next attempt: ${metrics.nextAttempt?.toISOString()}`);
+
     // Handle circuit breaker errors (fail fast)
   } else {
     console.log("Service error:", error.message);
@@ -219,11 +303,58 @@ try {
 }
 ```
 
+### Monitoring Dashboard Integration
+
+```typescript
+import { CircuitBreaker } from "bulwark";
+
+class MonitoringService {
+  private breakers = new Map<string, CircuitBreaker>();
+
+  registerBreaker(name: string, breaker: CircuitBreaker) {
+    this.breakers.set(name, breaker);
+  }
+
+  // Collect all metrics for dashboard
+  async collectAllMetrics() {
+    const allMetrics = {};
+
+    for (const [name, breaker] of this.breakers) {
+      // Use JSON export for consistent format
+      const jsonMetrics = breaker.exportMetricsJSON();
+      allMetrics[name] = JSON.parse(jsonMetrics);
+
+      // Add window statistics
+      allMetrics[name].windowStats = breaker.getWindowStats();
+    }
+
+    return allMetrics;
+  }
+
+  // Health check endpoint
+  async getHealthStatus() {
+    const status = {};
+
+    for (const [name, breaker] of this.breakers) {
+      const metrics = breaker.getMetrics();
+      status[name] = {
+        healthy: metrics.state === "CLOSED",
+        state: metrics.state,
+        successRate: (1 - metrics.failureRate) * 100,
+        lastStateChange: metrics.lastStateChange,
+      };
+    }
+
+    return status;
+  }
+}
+```
+
 ## 🔄 Version Roadmap
 
 - **v0.0.1** ✅ Foundation and core structure
-- **v0.0.2** 🚧 Basic state machine implementation
-- **v0.0.3** 📋 Metrics collection and monitoring
+- **v0.0.2** ✅ Basic state machine implementation
+- **v0.0.3** ✅ Metrics collection and monitoring with JSON export
 - **v0.1.0** 🎯 MVP with complete functionality
 - **v0.2.0** 🔌 HTTP client integrations
 - **v0.3.0** 🧠 Adaptive features and smart behavior
