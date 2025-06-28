@@ -1,6 +1,6 @@
 {
   "name": "bulwark",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "description": "A modern, TypeScript-first circuit breaker library for Node.js applications",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -81,6 +81,41 @@ export class MetricsCollector {
   }
 
   /**
+   * Export metrics as JSON string for external systems
+   * @param {CircuitState} currentState - Current circuit state
+   * @param {Date} lastStateChange - Last state change timestamp
+   * @param {Date} [nextAttempt] - Next attempt timestamp (for OPEN state)
+   * @returns {string} JSON formatted metrics
+   */
+  public exportJSON(currentState: CircuitState, lastStateChange: Date, nextAttempt?: Date): string {
+    const metrics = this.getMetrics(currentState, lastStateChange, nextAttempt);
+    return JSON.stringify(
+      {
+        timestamp: new Date().toISOString(),
+        circuitBreaker: metrics,
+      },
+      null,
+      2
+    );
+  }
+
+  /**
+   * Get sliding window statistics
+   * @returns {object} Window statistics including size, count, and failure rate
+   */
+  public getWindowStats(): {
+    windowSize: number;
+    currentCount: number;
+    failureRate: number;
+  } {
+    return {
+      windowSize: this.slidingWindow.getMaxSize(),
+      currentCount: this.slidingWindow.size(),
+      failureRate: this.getFailureRate(),
+    };
+  }
+
+  /**
    * Gets failure rate from sliding window
    * @returns {number} Failure rate (0-1)
    */

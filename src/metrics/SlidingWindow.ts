@@ -48,6 +48,14 @@ export class SlidingWindow<T> {
   }
 
   /**
+   * Gets the maximum size of the window
+   * @returns {number} Maximum number of records the window can hold
+   */
+  public getMaxSize(): number {
+    return this.maxSize;
+  }
+
+  /**
    * Clears all records from the window
    * @returns {void}
    */
