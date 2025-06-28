@@ -46,6 +46,116 @@ export interface CircuitBreakerMetrics {
 }
 
 /**
+ * Enhanced metrics with detailed statistics for monitoring
+ */
+export interface DetailedMetrics extends CircuitBreakerMetrics {
+  /** Response time percentiles */
+  responseTimePercentiles: ResponseTimePercentiles;
+  /** Call rates over different time windows */
+  callRates: CallRates;
+  /** Error distribution by type */
+  errorDistribution: Map<string, number>;
+  /** Memory usage statistics */
+  memoryUsage: MemoryUsage;
+  /** Performance overhead statistics */
+  performanceOverhead: PerformanceOverhead;
+}
+
+/**
+ * Response time percentile statistics
+ */
+export interface ResponseTimePercentiles {
+  /** 50th percentile (median) */
+  p50: number;
+  /** 75th percentile */
+  p75: number;
+  /** 90th percentile */
+  p90: number;
+  /** 95th percentile */
+  p95: number;
+  /** 99th percentile */
+  p99: number;
+  /** Minimum response time */
+  min: number;
+  /** Maximum response time */
+  max: number;
+}
+
+/**
+ * Call rate statistics over different time windows
+ */
+export interface CallRates {
+  /** Calls per second over last minute */
+  perSecond: number;
+  /** Calls per minute over last hour */
+  perMinute: number;
+  /** Calls per hour over last day */
+  perHour: number;
+}
+
+/**
+ * Memory usage statistics for the circuit breaker
+ */
+export interface MemoryUsage {
+  /** Current memory usage in bytes */
+  current: number;
+  /** Peak memory usage in bytes */
+  peak: number;
+  /** Memory growth rate in bytes per second */
+  growthRate: number;
+}
+
+/**
+ * Performance overhead statistics
+ */
+export interface PerformanceOverhead {
+  /** Average overhead per call in milliseconds */
+  averageOverhead: number;
+  /** Maximum overhead observed in milliseconds */
+  maxOverhead: number;
+  /** Overhead percentiles */
+  overheadPercentiles: {
+    p50: number;
+    p95: number;
+    p99: number;
+  };
+}
+
+/**
+ * Metrics export format for external monitoring systems
+ */
+export interface MetricsExport {
+  /** Circuit breaker instance name/identifier */
+  instanceId: string;
+  /** Export timestamp */
+  timestamp: Date;
+  /** Basic metrics */
+  metrics: CircuitBreakerMetrics;
+  /** Detailed metrics */
+  detailed?: DetailedMetrics;
+  /** Labels for grouping/filtering */
+  labels: Record<string, string>;
+}
+
+/**
+ * Metrics snapshot for time-series analysis
+ */
+export interface MetricsSnapshot {
+  /** Snapshot timestamp */
+  timestamp: Date;
+  /** Circuit state at snapshot time */
+  state: CircuitState;
+  /** Total calls since last snapshot */
+  callsSinceLastSnapshot: number;
+  /** Failures since last snapshot */
+  failuresSinceLastSnapshot: number;
+  /** Average response time since last snapshot */
+  avgResponseTimeSinceLastSnapshot: number;
+  /** Memory usage at snapshot time */
+  memoryUsage: number;
+}
+
+/**
  * Custom error for circuit breaker operations
  */
 export class CircuitBreakerError extends Error {

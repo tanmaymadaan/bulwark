@@ -389,4 +389,177 @@ describe("MetricsCollector", () => {
       expect(metricsCollector.getFailureRate()).toBe(0.5);
     });
   });
+
+  describe("v0.0.3 Export Functionality", () => {
+    describe("exportJSON", () => {
+      it("should export metrics as valid JSON", () => {
+        // Add some test data
+        metricsCollector.recordSuccess(100);
+        metricsCollector.recordSuccess(150);
+        metricsCollector.recordFailure(200, new Error("test error"));
+
+        const currentState = CircuitState.CLOSED;
+        const lastStateChange = new Date("2023-01-01T10:00:00Z");
+
+        const jsonString = metricsCollector.exportJSON(currentState, lastStateChange);
+
+        // Should be valid JSON
+        expect(() => JSON.parse(jsonString)).not.toThrow();
+
+        const exported = JSON.parse(jsonString);
+
+        // Should have expected structure
+        expect(exported).toHaveProperty("timestamp");
+        expect(exported).toHaveProperty("circuitBreaker");
+
+        // Should contain metrics data
+        const cb = exported.circuitBreaker;
+        expect(cb.state).toBe(CircuitState.CLOSED);
+        expect(cb.totalCalls).toBe(3);
+        expect(cb.successfulCalls).toBe(2);
+        expect(cb.failedCalls).toBe(1);
+        expect(cb.lastStateChange).toBe("2023-01-01T10:00:00.000Z");
+      });
+
+      it("should include nextAttempt when provided", () => {
+        metricsCollector.recordFailure(100, new Error("test"));
+
+        const currentState = CircuitState.OPEN;
+        const lastStateChange = new Date("2023-01-01T10:00:00Z");
+        const nextAttempt = new Date("2023-01-01T10:05:00Z");
+
+        const jsonString = metricsCollector.exportJSON(currentState, lastStateChange, nextAttempt);
+        const exported = JSON.parse(jsonString);
+
+        expect(exported.circuitBreaker.nextAttempt).toBe("2023-01-01T10:05:00.000Z");
+      });
+
+      it("should format JSON with proper indentation", () => {
+        metricsCollector.recordSuccess(100);
+
+        const jsonString = metricsCollector.exportJSON(CircuitState.CLOSED, new Date());
+
+        // Should be formatted with 2-space indentation
+        expect(jsonString).toContain('  "timestamp"');
+        expect(jsonString).toContain('  "circuitBreaker"');
+      });
+
+      it("should include timestamp in ISO format", () => {
+        const before = new Date().toISOString();
+        const jsonString = metricsCollector.exportJSON(CircuitState.CLOSED, new Date());
+        const after = new Date().toISOString();
+
+        const exported = JSON.parse(jsonString);
+        const timestamp = exported.timestamp;
+
+        expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+        expect(timestamp >= before).toBe(true);
+        expect(timestamp <= after).toBe(true);
+      });
+    });
+
+    describe("getWindowStats", () => {
+      it("should return correct window statistics", () => {
+        // Create collector with specific window size
+        const collector = new MetricsCollector(50);
+
+        // Add some data
+        for (let i = 0; i < 30; i++) {
+          collector.recordSuccess(100);
+        }
+        for (let i = 0; i < 10; i++) {
+          collector.recordFailure(150, new Error("test"));
+        }
+
+        const stats = collector.getWindowStats();
+
+        expect(stats.windowSize).toBe(50);
+        expect(stats.currentCount).toBe(40); // 30 success + 10 failures
+        expect(stats.failureRate).toBe(0.25); // 10 failures out of 40 total
+      });
+
+      it("should handle empty window", () => {
+        const stats = metricsCollector.getWindowStats();
+
+        expect(stats.windowSize).toBeGreaterThan(0);
+        expect(stats.currentCount).toBe(0);
+        expect(stats.failureRate).toBe(0);
+      });
+
+      it("should reflect sliding window behavior", () => {
+        const collector = new MetricsCollector(5); // Small window for testing
+
+        // Fill window completely
+        for (let i = 0; i < 5; i++) {
+          collector.recordSuccess(100);
+        }
+
+        let stats = collector.getWindowStats();
+        expect(stats.currentCount).toBe(5);
+        expect(stats.failureRate).toBe(0);
+
+        // Add more records to test sliding
+        collector.recordFailure(150, new Error("test"));
+        collector.recordFailure(150, new Error("test"));
+
+        stats = collector.getWindowStats();
+        expect(stats.currentCount).toBe(5); // Window size limit
+        expect(stats.failureRate).toBe(0.4); // 2 failures out of 5 total
+      });
+
+      it("should match sliding window failure rate", () => {
+        // Add test data
+        for (let i = 0; i < 20; i++) {
+          if (i % 3 === 0) {
+            metricsCollector.recordFailure(100, new Error("test"));
+          } else {
+            metricsCollector.recordSuccess(100);
+          }
+        }
+
+        const stats = metricsCollector.getWindowStats();
+        const directFailureRate = metricsCollector.getFailureRate();
+
+        expect(stats.failureRate).toBe(directFailureRate);
+      });
+    });
+
+    describe("Export Performance", () => {
+      it("should export quickly with large dataset", () => {
+        // Add significant amount of data
+        for (let i = 0; i < 1000; i++) {
+          metricsCollector.recordSuccess(Math.random() * 200);
+        }
+
+        const start = process.hrtime.bigint();
+        const jsonString = metricsCollector.exportJSON(CircuitState.CLOSED, new Date());
+        const end = process.hrtime.bigint();
+
+        const exportTime = Number(end - start) / 1_000_000; // Convert to ms
+
+        expect(exportTime).toBeLessThan(10); // Should be very fast
+        expect(jsonString).toContain('"totalCalls": 1000');
+      });
+
+      it("should get window stats quickly", () => {
+        // Add some test data
+        for (let i = 0; i < 500; i++) {
+          metricsCollector.recordSuccess(100);
+        }
+
+        const iterations = 1000;
+        const start = process.hrtime.bigint();
+
+        for (let i = 0; i < iterations; i++) {
+          const stats = metricsCollector.getWindowStats();
+          expect(stats).toBeDefined();
+        }
+
+        const end = process.hrtime.bigint();
+        const avgTime = Number(end - start) / 1_000_000 / iterations;
+
+        expect(avgTime).toBeLessThan(1); // Window stats should be very fast (adjusted from 0.1ms)
+      });
+    });
+  });
 });

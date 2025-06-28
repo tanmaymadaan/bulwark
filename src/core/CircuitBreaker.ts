@@ -58,6 +58,35 @@ export class CircuitBreaker {
    * @throws {Error} When operation fails
    */
   public async execute<R>(operation: Operation<R>): Promise<R> {
+    // Performance measurement for development/testing
+    const performanceStart = process.hrtime.bigint();
+
+    try {
+      const result = await this.executeOperation(operation);
+      return result;
+    } finally {
+      // Measure circuit breaker overhead (for validation only)
+      if (process.env["NODE_ENV"] === "development" || process.env["NODE_ENV"] === "test") {
+        const performanceEnd = process.hrtime.bigint();
+        const overhead = Number(performanceEnd - performanceStart) / 1_000_000; // Convert to ms
+
+        // Warn if we exceed our 1ms target
+        if (overhead > 1) {
+          console.warn(`Circuit breaker overhead: ${overhead.toFixed(3)}ms (target: <1ms)`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Internal operation execution with circuit breaker logic
+   * @param {Operation<R>} operation - Async operation to execute
+   * @returns {Promise<R>} Promise resolving to operation result
+   * @throws {CircuitBreakerError} When circuit is open and not ready for retry
+   * @throws {TimeoutError} When operation exceeds timeout
+   * @throws {Error} When operation fails
+   */
+  private async executeOperation<R>(operation: Operation<R>): Promise<R> {
     // Check current state and decide whether to execute
     const currentState = this.stateManager.getState();
 
@@ -102,6 +131,30 @@ export class CircuitBreaker {
       this.stateManager.getLastStateChange(),
       this.getNextAttemptTime()
     );
+  }
+
+  /**
+   * Exports current metrics as JSON string for external monitoring systems
+   * @returns {string} JSON formatted metrics with timestamp
+   */
+  public exportMetricsJSON(): string {
+    return this.metricsCollector.exportJSON(
+      this.stateManager.getState(),
+      this.stateManager.getLastStateChange(),
+      this.getNextAttemptTime()
+    );
+  }
+
+  /**
+   * Gets sliding window statistics
+   * @returns {object} Window size, current count, and failure rate from sliding window
+   */
+  public getWindowStats(): {
+    windowSize: number;
+    currentCount: number;
+    failureRate: number;
+  } {
+    return this.metricsCollector.getWindowStats();
   }
 
   /**
