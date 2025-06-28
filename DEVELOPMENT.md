@@ -339,6 +339,79 @@ main                    # Production-ready code
 7. **Code Review**: Address feedback
 8. **Merge**: Squash and merge to develop
 
+### Pull Request Title Convention
+
+Follow the same [Conventional Commits](https://www.conventionalcommits.org/) format for PR titles to maintain consistency across the project.
+
+#### Format
+
+```
+<type>[optional scope]: <description>
+```
+
+#### PR Title Examples
+
+**✅ Good Examples:**
+
+```
+feat(core): Add circuit breaker state machine with failure detection
+fix(integrations): Resolve Axios interceptor memory leak
+docs(api): Update CircuitBreaker configuration examples
+perf(metrics): Optimize sliding window performance by 60%
+test(integration): Add comprehensive end-to-end test suite
+refactor(state): Simplify state transition logic
+```
+
+**❌ Bad Examples:**
+
+```
+# Too vague
+Add new feature
+
+# Missing type/scope
+Circuit breaker improvements
+
+# Not descriptive enough
+Fix bug
+
+# Too long (should be <72 characters)
+feat(core): Add comprehensive circuit breaker implementation with state machine, failure detection, timeout handling, and metrics collection
+```
+
+#### PR Title Guidelines
+
+| Guideline         | Description                | Example                                               |
+| ----------------- | -------------------------- | ----------------------------------------------------- |
+| **Length**        | Keep under 72 characters   | `feat(core): Add adaptive timeout detection`          |
+| **Scope**         | Use same scopes as commits | `feat(integrations): Add Express middleware`          |
+| **Description**   | Clear, actionable summary  | `fix(metrics): Resolve memory leak in sliding window` |
+| **Present Tense** | Use imperative mood        | `Add`, `Fix`, `Update` (not `Added`, `Fixed`)         |
+| **No Period**     | Don't end with punctuation | ✅ `feat: Add feature` ❌ `feat: Add feature.`        |
+
+#### PR Title Types
+
+Use the same types as commit messages:
+
+- `feat`: New features or enhancements
+- `fix`: Bug fixes and corrections
+- `docs`: Documentation updates
+- `test`: Test additions or modifications
+- `refactor`: Code restructuring without functional changes
+- `perf`: Performance improvements
+- `style`: Code formatting and style changes
+- `chore`: Maintenance tasks and dependencies
+- `ci`: CI/CD pipeline changes
+
+#### Version-Specific Titles
+
+For version milestones, include version context:
+
+```
+feat(core): Add v0.0.3 metrics export functionality
+fix(core): Resolve v0.0.2 state transition edge cases
+docs: Update v0.1.0 migration guide
+```
+
 ### Release Process
 
 1. **Code Freeze**: Stop new features
